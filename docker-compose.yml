@@ -1,0 +1,47 @@
+## Docker Compose 配置（Compose V2，无需显式 version 字段）
+## 该文件定义 MySQL 服务、数据卷与网络，用于本地开发环境。
+services:
+  ## MySQL 数据库服务
+  mysql:
+    ## 使用官方 MySQL 8.0 镜像
+    image: mysql:8.0
+    ## 为容器命名，便于通过 docker 命令管理
+    container_name: app-mysql
+    ## 重启策略：确保异常退出后自动重启（开发环境便捷）
+    restart: always
+    ## 端口映射：将宿主机 3307 映射到容器 3306，避开本机 MySQL 的 3306
+    ports:
+      - "3307:3306"
+    ## 环境变量：初始化 root 密码、默认数据库与时区
+    environment:
+      ## root 密码：优先取环境变量 DB_PASSWORD，否则默认 root（仅用于开发）
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      ## 初始化创建的数据库名称：默认 interview_agent（仅创建，不赋权）
+      MYSQL_DATABASE: ${DB_NAME:-interview_agent}
+      ## 设置容器时区为上海，便于日志与定时任务对齐本地时间
+      TZ: Asia/Shanghai
+    ## 数据卷挂载：持久化数据与初始化 SQL
+    volumes:
+      ## MySQL 数据目录持久化到本地卷，避免重启/删除容器丢失数据
+      - mysql-data:/var/lib/mysql
+    ## 健康检查：通过 mysqladmin ping 检查服务是否可用
+    healthcheck:
+      ## 健康检查命令：使用 root 用户与上方的密码变量进行连通性检测
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD:-root}"]
+      ## 检查间隔、超时与重试次数（平衡启动速度与稳定性）
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ## 网络：加入到下方定义的 app-network，便于与其他服务互通
+    networks:
+      - app-network
+
+## 数据卷定义：声明持久化卷用于存储 MySQL 数据
+volumes:
+  mysql-data:
+    driver: local
+
+## 网络定义：创建一个桥接网络，隔离并连接本项目的各服务
+networks:
+  app-network:
+    driver: bridge
